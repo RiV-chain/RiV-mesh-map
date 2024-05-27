@@ -23,16 +23,25 @@ import org.apache.commons.io.filefilter.TrueFileFilter;
 import org.riv.node.PeerInfo;
 
 public class SchedulePeerReaderListener implements ServletContextListener {
+	
+	private static final String PEERS_REPO_PATH = "/opt/tomcat/public-peers";//"D:\\Git\\public-peers";//
 
-	private static final String PEERS_REPO_PATH = "/opt/tomcat/public-peers";//"C:\\Users\\Vadym.Server-PC\\git\\public-peers.git";
+	/**
+	 * Peers per Country
+	 */
+	public static final Map<String, LinkedHashMap<String, PeerInfo>> whiteListPeers = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();
 
-	public static final Map<String, LinkedHashMap<String, PeerInfo>> peersPerCountry = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();
+	public static Map<String, LinkedHashMap<String, PeerInfo>> mergedPeers = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();;
+	
+	public static final Map<String, LinkedHashMap<String, PeerInfo>> userPeers = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();
 
 	Pattern IPv4_PEER_REGEXP = Pattern.compile(
 			"(((tcp)|(tls)|(sctp)|(mpath))\\://(((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d)\\.){3}(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d|\\d))\\:\\d{1,5})");
 	Pattern IPv6_PEER_REGEXP = Pattern.compile(
 			"((tcp)|(tls)|(sctp)|(mpath))\\://\\[(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\\]\\:\\d{1,5}");
 	Pattern DOMAIN_NAME_PEER_REGEXP = Pattern.compile("(((tcp)|(tls)|(sctp)|(mpath))\\://([\\w\\-]+\\.)+[a-zA-Z]+\\:\\d{1,5})");
+
+	public static int period = 30;
 
 	@Override
 	public void contextInitialized(ServletContextEvent arg0) {
@@ -82,19 +91,19 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 									Matcher mIpv4 = IPv4_PEER_REGEXP.matcher(c);
 									while (mIpv4.find()) {
 										String peer = mIpv4.group(0);
-										PeerInfo pi = new PeerInfo(true, null, null, 0);
+										PeerInfo pi = new PeerInfo(null, null);
 										peerInfoMap.put(peer, pi);
 									}
 									Matcher mIpv6 = IPv6_PEER_REGEXP.matcher(c);
 									while (mIpv6.find()) {
 										String peer = mIpv6.group(0);
-										PeerInfo pi = new PeerInfo(true, null, null, 0);
+										PeerInfo pi = new PeerInfo(null, null);
 										peerInfoMap.put(peer, pi);
 									}
 									Matcher mDomain = DOMAIN_NAME_PEER_REGEXP.matcher(c);
 									while (mDomain.find()) {
 										String peer = mDomain.group(0);
-										PeerInfo pi = new PeerInfo(true, null, null, 0);
+										PeerInfo pi = new PeerInfo(null, null);
 										peerInfoMap.put(peer, pi);
 									}
 								}
@@ -102,7 +111,7 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 								e.printStackTrace();
 							}
 							if (peerInfoMap.size() > 0) {
-								peersPerCountry.put(countryNext.getName(), peerInfoMap);
+								whiteListPeers.put(countryNext.getName(), peerInfoMap);
 							}
 						}
 					}
@@ -110,8 +119,11 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
+			mergeMaps(whiteListPeers, userPeers);
+			whiteListPeers.clear();
+	        userPeers.clear();
 		};
-		ses.scheduleAtFixedRate(task2, 5, 600, TimeUnit.SECONDS);
+		ses.scheduleAtFixedRate(task2, 5, period , TimeUnit.SECONDS);
 		arg0.getServletContext().setAttribute("timer", ses);
 	}
 
@@ -121,5 +133,26 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 		ScheduledExecutorService ses = (ScheduledExecutorService) servletContext.getAttribute("timer");
 		ses.shutdown();
 	}
+	
+    public static void mergeMaps(
+            Map<String, LinkedHashMap<String, PeerInfo>> whiteListPeers,
+            Map<String, LinkedHashMap<String, PeerInfo>> userPeers) {
+        Map<String, LinkedHashMap<String, PeerInfo>> mergedMap = new TreeMap<>(whiteListPeers);
+
+        for (Map.Entry<String, LinkedHashMap<String, PeerInfo>> entry : userPeers.entrySet()) {
+            mergedMap.merge(entry.getKey(), entry.getValue(), (existingValue, newValue) -> {
+                existingValue.putAll(newValue);
+                return existingValue;
+            });
+        }
+        synchronized (mergedPeers) {
+        	for (Map.Entry<String, LinkedHashMap<String, PeerInfo>> entry : mergedMap.entrySet()) {
+                mergedPeers.merge(entry.getKey(), entry.getValue(), (existingValue, newValue) -> {
+                    existingValue.putAll(newValue);
+                    return existingValue;
+                });
+            }
+        }
+    }
 
 }

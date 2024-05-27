@@ -12,20 +12,15 @@ import javax.ws.rs.core.Response.Status;
 
 import org.riv.node.PeerInfo;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
 import listener.SchedulePeerReaderListener;
 
 @Path("/peers.json")
-public class PeersService {
+public class PeersService extends BaseService {
 	
-	Gson gson = new GsonBuilder().setPrettyPrinting().create();
-
     @GET
     @Produces({MediaType.APPLICATION_JSON})
     public Response getPeers() {
-    	Map<String, LinkedHashMap<String, PeerInfo>> map = SchedulePeerReaderListener.peersPerCountry;
+    	Map<String, LinkedHashMap<String, PeerInfo>> map = SchedulePeerReaderListener.mergedPeers;
         return Response.status(Status.OK).entity(gson.toJson(map)).build();
     }
 

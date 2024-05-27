@@ -2,22 +2,24 @@ package org.riv.node;
 
 public class PeerInfo {
 	
-	public PeerInfo(boolean up, String address, String box_pub_key, long last_seen) {
-		this.up = up;
+	public PeerInfo(String address, String box_pub_key) {
 		this.address = address;
 		this.box_pub_key = box_pub_key;
-		this.last_seen = last_seen;
 	}
 
-	private boolean up;
+	private Boolean up = null;
 	private String address;
 	private String box_pub_key;
-	private long last_seen;
+	private long last_seen = System.currentTimeMillis();
 	
-	public boolean isUp() {
-		return up;
+	public Boolean isUp() {
+		if(up == null || up) {
+			return Boolean.TRUE;
+		} else {
+			return Boolean.FALSE;
+		}
 	}
-	public void setUp(boolean up) {
+	public void setUp(Boolean up) {
 		this.up = up;
 	}
 	public String getAddress() {
@@ -38,5 +40,4 @@ public class PeerInfo {
 	public void setLast_seen(long last_seen) {
 		this.last_seen = last_seen;
 	}
-
 }
