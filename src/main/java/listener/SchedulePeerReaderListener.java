@@ -1,7 +1,10 @@
 package listener;
 
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,16 +25,20 @@ import org.apache.commons.io.filefilter.IOFileFilter;
 import org.apache.commons.io.filefilter.TrueFileFilter;
 import org.riv.node.PeerInfo;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 public class SchedulePeerReaderListener implements ServletContextListener {
 	
 	private static final String PEERS_REPO_PATH = "/opt/tomcat/public-peers";//"D:\\Git\\public-peers";//
+	private static final String PEERS_MERGED_PATH = "/opt/tomcat/merged-peers";
 
 	/**
 	 * Peers per Country
 	 */
 	public static final Map<String, LinkedHashMap<String, PeerInfo>> whiteListPeers = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();
 
-	public static Map<String, LinkedHashMap<String, PeerInfo>> mergedPeers = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();;
+	public static Map<String, LinkedHashMap<String, PeerInfo>> mergedPeers = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();
 	
 	public static final Map<String, LinkedHashMap<String, PeerInfo>> userPeers = new TreeMap<String, LinkedHashMap<String, PeerInfo>>();
 
@@ -45,8 +52,15 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 
 	@Override
 	public void contextInitialized(ServletContextEvent arg0) {
-		ScheduledExecutorService ses = Executors.newScheduledThreadPool(1);
-		Runnable task2 = () -> {
+		
+		File peersMerged = new File(PEERS_MERGED_PATH+"/peers.json");
+		if(peersMerged.exists()) {
+			// Read to memory
+			SchedulePeerReaderListener.mergedPeers = loadJsonFromFile(peersMerged);
+		}
+		
+		ScheduledExecutorService ses = Executors.newScheduledThreadPool(2);
+		Runnable parseGitHubRepo = () -> {
 
 			try {
 				Iterator<File> it = FileUtils.iterateFilesAndDirs(new File(PEERS_REPO_PATH), new IOFileFilter() {
@@ -122,8 +136,20 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 			mergeMaps(whiteListPeers, userPeers);
 			whiteListPeers.clear();
 	        userPeers.clear();
+	      //Save peers
+			// Convert mergedPeers to JSON string
+			String data = new Gson().toJson(SchedulePeerReaderListener.mergedPeers);
+
+	        // Save JSON string to file
+	        boolean success = saveJsonToFile(data, PEERS_MERGED_PATH+"/peers.json");
+	        if (success) {
+	            System.out.println("Data saved successfully to peers.json");
+	        } else {
+	            System.out.println("Failed to save data to peers.json");
+	        }
 		};
-		ses.scheduleAtFixedRate(task2, 5, period , TimeUnit.SECONDS);
+
+		ses.scheduleAtFixedRate(parseGitHubRepo, 5, period , TimeUnit.SECONDS);
 		arg0.getServletContext().setAttribute("timer", ses);
 	}
 
@@ -155,4 +181,23 @@ public class SchedulePeerReaderListener implements ServletContextListener {
         }
     }
 
+    private static boolean saveJsonToFile(String jsonString, String fileName) {
+        try (FileWriter fileWriter = new FileWriter(fileName)) {
+            fileWriter.write(jsonString);
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+    
+    private static Map<String, LinkedHashMap<String, PeerInfo>> loadJsonFromFile(File file) {
+        try (FileReader fileReader = new FileReader(file)) {
+            Type type = new TypeToken<TreeMap<String, LinkedHashMap<String, PeerInfo>>>() {}.getType();
+            return new Gson().fromJson(fileReader, type);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
 }

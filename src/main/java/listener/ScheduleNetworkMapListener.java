@@ -11,7 +11,6 @@ import javax.servlet.ServletContext;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
-
 public class ScheduleNetworkMapListener implements ServletContextListener {
 
 	private static Properties config = new Properties();
@@ -46,13 +45,7 @@ public class ScheduleNetworkMapListener implements ServletContextListener {
 			}
 		};
 		
-		Runnable peersMapUpdateTask = () -> {
-			//TODO update peers rank
-			//
-		};
-
 		ses.scheduleAtFixedRate(crawlerTask, getInitialDelay(), getPeriod(), TimeUnit.SECONDS);
-		ses.scheduleAtFixedRate(peersMapUpdateTask, getInitialDelay(), getPeriod(), TimeUnit.SECONDS);
 
 		arg0.getServletContext().setAttribute("timer", ses);
 	}
