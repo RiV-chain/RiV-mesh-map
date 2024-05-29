@@ -35,6 +35,8 @@ public class PeerService extends BaseService {
 	//FIX ME only TCP peers
 	private static final String DEFAULT_PEER_SCHEMA = "tcp://";
 	
+	private static final int TIMEOUT_MS = 5000; // 5 seconds
+	
 	
 	static {
 		try {
@@ -121,6 +123,7 @@ public class PeerService extends BaseService {
         String meta = null;
         try {
             pingSocket = new Socket(remoteIp, port);
+            pingSocket.setSoTimeout(TIMEOUT_MS);
             out = new PrintWriter(pingSocket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(pingSocket.getInputStream()));
             meta = in.readLine();
