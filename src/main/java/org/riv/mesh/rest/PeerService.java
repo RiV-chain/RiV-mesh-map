@@ -10,8 +10,10 @@ import java.util.LinkedHashMap;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
+import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
@@ -28,6 +30,10 @@ import javax.ws.rs.core.MediaType;
 
 @Path("/peer")
 public class PeerService extends BaseService {
+	
+	private static final int MIN_ALLOWED_PORT = 49152;
+	
+	private static final int MAX_ALLOWED_PORT = 65535;
 	
 	private static final String binfile = "IP2LOCATION-LITE-DB1.BIN";
 	
@@ -49,11 +55,76 @@ public class PeerService extends BaseService {
 		}
 	}
 
+	/**
+	 * This methods verifies @param port availability. It returns country and elapsed time in milliseconds
+	 * @param port
+	 * @param request
+	 * @return
+	 */
+    @GET
+    @Path("/{port:\\d{5}}")
+    public Response getPeer(@PathParam("port") int port, @Context HttpServletRequest request) {
+        // Extract port from the URL path
+        
+        if(port < MIN_ALLOWED_PORT || port > MAX_ALLOWED_PORT) {
+        	return Response.status(Status.FORBIDDEN).build();
+        }
+
+        // Retrieve the remote request IP address behind ssl proxy
+        String remoteIp = request.getHeader("X-Forwarded-For");
+        if(remoteIp == null) {
+        	// Fallback to direct remote IP
+        	remoteIp = request.getRemoteAddr();
+        }
+        
+        // Log or process the port and remote IP as needed
+        System.out.println("Received port: " + port + ", from IP: " + remoteIp);
+        
+        // If test success increment rank otherwise decrement it.
+        long elapsedTime;
+        try {
+        	elapsedTime = testPortAndMeta(remoteIp, port); 
+			if(elapsedTime <= 0) {
+				return Response.status(Status.NOT_FOUND).build();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			return Response.status(Status.NOT_FOUND).build();
+		}
+        
+        // Get country info from ip2country
+        IPResult result;
+        try {
+			result = ip2countryDb.IPQuery(remoteIp);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return Response.status(Status.INTERNAL_SERVER_ERROR).build();
+		}
+        if(result.getStatus() != "OK" || result.getCountryLong().length() < 2) {
+        	return Response.status(Status.BAD_REQUEST).build();
+        }
+        String countryLong = getFirstTwoWords(result.getCountryLong()).toLowerCase();
+               
+        String json = "{\"countryLong\":\""+countryLong+"\", \"elapsedTime\":"+elapsedTime+"}";
+        // Return a response
+        return Response.ok(json, MediaType.APPLICATION_JSON).build();
+    }
+    
+    /**
+     * This method adds new peer if a port is open.
+     * @param peerPortRequest
+     * @param request
+     * @return
+     */
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response postPeer(PeerPortRequest peerPortRequest, @Context HttpServletRequest request) {
         // Extract port from the request body
         int port = peerPortRequest.getPort();
+        
+        if(port < MIN_ALLOWED_PORT || port > MAX_ALLOWED_PORT) {
+        	return Response.status(Status.FORBIDDEN).build();
+        }
 
         // Retrieve the remote request IP address behind ssl proxy
         String remoteIp = request.getHeader("X-Forwarded-For");
@@ -67,7 +138,7 @@ public class PeerService extends BaseService {
         
         // If test success increment rank otherwise decrement it.
         try {
-			if(!testPortAndMeta(remoteIp, port)) {
+			if(testPortAndMeta(remoteIp, port) <= 0) {
 				return Response.status(Status.NOT_FOUND).build();
 			}
 		} catch (IOException e) {
@@ -116,25 +187,29 @@ public class PeerService extends BaseService {
         return Response.status(Status.CREATED).build();
     }
     
-    private static boolean testPortAndMeta(String remoteIp, int port) throws IOException {
+    private static long testPortAndMeta(String remoteIp, int port) throws IOException {
 
         Socket pingSocket = null;
         PrintWriter out = null;
         BufferedReader in = null;
         String meta = null;
-        try {
+        long start;
+		long end;
+		try {
             pingSocket = new Socket();
+            start = System.currentTimeMillis();
             pingSocket.connect(new InetSocketAddress(remoteIp, port), TIMEOUT_MS);
             out = new PrintWriter(pingSocket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(pingSocket.getInputStream()));
             meta = in.readLine();
-            System.out.println(meta);
+            end = System.currentTimeMillis();
+            //System.out.println(meta);
             if(meta == null) {
-            	return false;
+            	return -1;
             }
         } catch (IOException e) {
             e.printStackTrace();
-            return false;
+            return -2;
         } finally {
         	if(out != null) {
         		out.close();
@@ -146,7 +221,10 @@ public class PeerService extends BaseService {
         		pingSocket.close();
         	}
         }
-        return meta.startsWith("meta");
+        if(meta.startsWith("meta")) {
+        	return end - start;
+        }
+        return -3;
     }
     
     private static String getFirstTwoWords(String countryLong) {
