@@ -133,7 +133,8 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			mergeMaps(whiteListPeers, userPeers);
+			Map<String, LinkedHashMap<String, PeerInfo>> mergedMap = mergeMaps(whiteListPeers, userPeers);
+			SchedulePeerReaderListener.mergedPeers = mergedMap;
 			whiteListPeers.clear();
 	        userPeers.clear();
 	      //Save peers
@@ -160,7 +161,7 @@ public class SchedulePeerReaderListener implements ServletContextListener {
 		ses.shutdown();
 	}
 	
-    public static void mergeMaps(
+    public static Map<String, LinkedHashMap<String, PeerInfo>> mergeMaps(
             Map<String, LinkedHashMap<String, PeerInfo>> whiteListPeers,
             Map<String, LinkedHashMap<String, PeerInfo>> userPeers) {
         Map<String, LinkedHashMap<String, PeerInfo>> mergedMap = new TreeMap<>(whiteListPeers);
@@ -171,14 +172,7 @@ public class SchedulePeerReaderListener implements ServletContextListener {
                 return existingValue;
             });
         }
-        synchronized (mergedPeers) {
-        	for (Map.Entry<String, LinkedHashMap<String, PeerInfo>> entry : mergedMap.entrySet()) {
-                mergedPeers.merge(entry.getKey(), entry.getValue(), (existingValue, newValue) -> {
-                    existingValue.putAll(newValue);
-                    return existingValue;
-                });
-            }
-        }
+        return mergedMap;
     }
 
     private static boolean saveJsonToFile(String jsonString, String fileName) {
